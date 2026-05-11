@@ -34,15 +34,15 @@
         const ambientLight = new THREE.AmbientLight(0xffffff, 10);
         scene.add(ambientLight);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 10);
-        directionalLight.position.set(0, 10, 10);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 16);
+        directionalLight.position.set(-3, 10, 10);
         scene.add(directionalLight);
 
         //const directionalLighthelper = new THREE.DirectionalLightHelper(directionalLight, 1);
         //scene.add(directionalLighthelper);
 
-        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 8);
-        directionalLight2.position.set( 0, -5, 10);
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 14);
+        directionalLight2.position.set(3, -5, 10);
         scene.add(directionalLight2);
 
         //const directionalLighthelper2 = new THREE.DirectionalLightHelper(directionalLight2, 1);
@@ -81,9 +81,13 @@
 
         // Cube の元頂点を保存
         const cubePositions = new Float32Array(rawPositions);
-
+        
         // Sphere の対応頂点を計算して保存
         const spherePositions = new Float32Array(rawPositions.length);
+        const geidaiPositions = new Float32Array(rawPositions.length);
+        const B3Positions = new Float32Array(rawPositions.length);
+        const clayPositions = new Float32Array(rawPositions.length);
+
         for (let i = 0; i < vertexCount; i++) {
             const x = cubePositions[i * 3];
             const y = cubePositions[i * 3 + 1];
@@ -92,7 +96,24 @@
             spherePositions[i * 3]     = p.x;
             spherePositions[i * 3 + 1] = p.y;
             spherePositions[i * 3 + 2] = p.z;
+
+            //Geidai_panel の対応頂点を計算して保存
+            geidaiPositions[i * 3]     = x * 1.71;
+            geidaiPositions[i * 3 + 1] = y * 2.23;
+            geidaiPositions[i * 3 + 2] = z * 0.08;
+
+            //B3_panel の対応頂点を計算して保存
+            B3Positions[i * 3]     = x * 1.649;
+            B3Positions[i * 3 + 1] = y * 1.21;
+            B3Positions[i * 3 + 2] = z * 0.08;
+            
+            //粘土板の対応頂点を計算して保存
+            clayPositions[i * 3]     = x * 2.0;
+            clayPositions[i * 3 + 1] = y * 0.05;
+            clayPositions[i * 3 + 2] = z * 1.65;
         }
+
+        const all_positions = [spherePositions, cubePositions, geidaiPositions, B3Positions, clayPositions];
 
         const material = new THREE.MeshPhysicalMaterial({
             color: 0x000000,
@@ -105,55 +126,36 @@
         });
 
         const object = new THREE.Mesh(geometry, material);
-        scene.add(object);
+        
+        //defaultではsphere
+        const positions = object.geometry.attributes.position.array;
+        positions.set(spherePositions);
+        scene.add(object);            
+        
         directionalLight.target  = object;
         directionalLight2.target = object;
 
+        //const axesHelper = new THREE.AxesHelper( 1000 );
+        // scene.add( axesHelper );
 
-        //---------アリアスのモデルを配置----------
-        const glbloader = new THREE.GLTFLoader();
-        
-        const arias = await glbloader.loadAsync('https://raw.githubusercontent.com/I-H-coder/port_code/main/assets/arias_lowpoli.glb');
-        
-        const model = arias.scene;
-        model.traverse((child) => {
-
-            if (child.isMesh) {
-
-                const geometry = child.geometry;
-
-                const positions = geometry.attributes.position.array;
-
-                console.log(positions.length/3);
-
-            }
-
-        });
-        model.scale.set(0.2, 0.2, 0.2);
-        
-        model.traverse((child) => {
-            if (child.isMesh) {
-                child.material = material;
-            }
-        });
-
-        //scene.add(model);
-
-        /*const axesHelper = new THREE.AxesHelper( 1000 );
-            scene.add( axesHelper );
         // Morph値（JS管理）*/
         let morph_val = 0;
 
         // ─── JS側でLERP → Noise適用 ────────────────────────────────
-        function positionNoise(time, strength = 1.0) {
-            const positions = object.geometry.attributes.position.array;
 
-            const morph_pace = Math.abs(Math.sin(morph_val));
+        function positionNoise(time, strength = 1.0) {
+            const current_state = Math.floor(morph_val%all_positions.length); 
+            const next_state = (current_state < all_positions.length - 1) ? current_state + 1 : 0;
+            const bef_positions = all_positions[current_state];
+            const af_positions = all_positions[next_state];
+
+            const morph_pace = morph_val - Math.trunc(morph_val);
+
             for (let i = 0; i < vertexCount; i++) {
                 // ① CPU側でCube↔SphereをLERP（MorphTargetの代替）
-                const lx = cubePositions[i * 3]     + (spherePositions[i * 3]     - cubePositions[i * 3])     * morph_pace;
-                const ly = cubePositions[i * 3 + 1] + (spherePositions[i * 3 + 1] - cubePositions[i * 3 + 1]) * morph_pace;
-                const lz = cubePositions[i * 3 + 2] + (spherePositions[i * 3 + 2] - cubePositions[i * 3 + 2]) * morph_pace;
+                const lx = bef_positions[i * 3]     + (af_positions[i * 3]     - bef_positions[i * 3])     * morph_pace;
+                const ly = bef_positions[i * 3 + 1] + (af_positions[i * 3 + 1] - bef_positions[i * 3 + 1]) * morph_pace;
+                const lz = bef_positions[i * 3 + 2] + (af_positions[i * 3 + 2] - bef_positions[i * 3 + 2]) * morph_pace;
 
                 const p = new THREE.Vector3(lx, ly, lz);
 
@@ -194,7 +196,7 @@
             k -= k_strength * 0.8;
             k = Math.min(Math.max(k, 0.6), 1.5);
             positionNoise(time);
-            
+
             object.rotation.y += 0.005;
             object.geometry.attributes.position.needsUpdate = true;
             object.geometry.computeVertexNormals();
